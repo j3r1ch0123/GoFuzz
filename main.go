@@ -25,7 +25,7 @@ func printBanner() {
 	fmt.Println(banner)
 }
 
-func fuzzUrl(url, wordlist, method string, workers int, extensions []string, headers map[string]string) {
+func fuzzUrl(url, wordlist, method string, workers int, extensions []string, headers map[string]string, statusCodeFilter []int) {
 	start := time.Now()
 
 	file, err := os.Open(wordlist)
@@ -43,7 +43,6 @@ func fuzzUrl(url, wordlist, method string, workers int, extensions []string, hea
 			lines = append(lines, line)
 		}
 	}
-
 	if err := scanner.Err(); err != nil {
 		fmt.Println("Error reading wordlist:", err)
 		return
@@ -75,7 +74,8 @@ func fuzzUrl(url, wordlist, method string, workers int, extensions []string, hea
 				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
 
-				if resp.StatusCode == 200 {
+				// Filtering logic
+				if len(statusCodeFilter) == 0 || containsInt(statusCodeFilter, resp.StatusCode) {
 					fmt.Printf("%s%s\t%d\t%d\n", url, path, resp.StatusCode, len(body))
 				}
 			}
@@ -95,6 +95,15 @@ func fuzzUrl(url, wordlist, method string, workers int, extensions []string, hea
 
 	elapsed := time.Since(start)
 	fmt.Printf("Time taken: %v\n", elapsed)
+}
+
+func containsInt(slice []int, val int) bool {
+	for _, v := range slice {
+		if v == val {
+			return true
+		}
+	}
+	return false
 }
 
 func parseHeaders(headerArg string) map[string]string {
@@ -118,8 +127,8 @@ func main() {
 	printBanner()
 
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: " + os.Args[0] + " <url> <wordlist> [workers] [extensions] [method] [headers]")
-		fmt.Println("Example: " + os.Args[0] + " http://target/ words.txt 20 .php,.bak GET \"User-Agent: fuzzzilla,Authorization: Bearer abc123\"")
+		fmt.Println("Usage: " + os.Args[0] + " <url> <wordlist> [workers] [extensions] [method] [headers] [statusCodes]")
+		fmt.Println("Example: " + os.Args[0] + " http://target/ words.txt 20 .php,.bak GET \"User-Agent: fuzzzilla\" 200,302")
 		os.Exit(1)
 	}
 
@@ -148,5 +157,15 @@ func main() {
 		headers = parseHeaders(os.Args[6])
 	}
 
-	fuzzUrl(url, wordlist, method, workers, extensions, headers)
+	statusCodeFilter := []int{}
+	if len(os.Args) >= 8 {
+		codeStrs := strings.Split(os.Args[7], ",")
+		for _, cs := range codeStrs {
+			if c, err := strconv.Atoi(strings.TrimSpace(cs)); err == nil {
+				statusCodeFilter = append(statusCodeFilter, c)
+			}
+		}
+	}
+
+	fuzzUrl(url, wordlist, method, workers, extensions, headers, statusCodeFilter)
 }
