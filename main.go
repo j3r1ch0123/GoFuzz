@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -24,8 +25,7 @@ func printBanner() {
 	fmt.Println(banner)
 }
 
-func fuzzUrl(url, wordlist string, workers int) {
-	// Get the current time
+func fuzzUrl(url, wordlist string, workers int, extensions []string) {
 	start := time.Now()
 
 	// Open the wordlist
@@ -51,15 +51,15 @@ func fuzzUrl(url, wordlist string, workers int) {
 	}
 
 	var wg sync.WaitGroup
-	jobs := make(chan string, len(lines))
+	jobs := make(chan string, len(lines)*len(extensions)+len(lines))
 
 	// Worker goroutines
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for line := range jobs {
-				req, err := http.NewRequest("GET", url+line, nil)
+			for path := range jobs {
+				req, err := http.NewRequest("GET", url+path, nil)
 				if err != nil {
 					continue
 				}
@@ -70,15 +70,18 @@ func fuzzUrl(url, wordlist string, workers int) {
 				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
 				if resp.StatusCode == 200 {
-					fmt.Printf("%s%s\t%d\t%d\n", url, line, resp.StatusCode, len(body))
+					fmt.Printf("%s%s\t%d\t%d\n", url, path, resp.StatusCode, len(body))
 				}
 			}
 		}()
 	}
 
-	// Send jobs
+	// Send jobs: bare word and word+extensions
 	for _, line := range lines {
 		jobs <- line
+		for _, ext := range extensions {
+			jobs <- line + ext
+		}
 	}
 	close(jobs)
 
@@ -90,20 +93,16 @@ func fuzzUrl(url, wordlist string, workers int) {
 }
 
 func main() {
-	// Print the banner
 	printBanner()
 
-	// If the arguments are not provided
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: " + os.Args[0] + " <url> <wordlist> [workers]")
+		fmt.Println("Usage: " + os.Args[0] + " <url> <wordlist> [workers] [extensions]")
 		os.Exit(1)
 	}
 
-	// Get the url and wordlist from the command line
 	url := os.Args[1]
 	wordlist := os.Args[2]
 
-	// Default number of workers
 	workers := 10
 	if len(os.Args) >= 4 {
 		if w, err := strconv.Atoi(os.Args[3]); err == nil && w > 0 {
@@ -111,6 +110,10 @@ func main() {
 		}
 	}
 
-	// Call the fuzzUrl function
-	fuzzUrl(url, wordlist, workers)
+	extensions := []string{}
+	if len(os.Args) >= 5 {
+		extensions = strings.Split(os.Args[4], ",")
+	}
+
+	fuzzUrl(url, wordlist, workers, extensions)
 }
