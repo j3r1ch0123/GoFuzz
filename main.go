@@ -25,10 +25,9 @@ func printBanner() {
 	fmt.Println(banner)
 }
 
-func fuzzUrl(url, wordlist string, workers int, extensions []string) {
+func fuzzUrl(url, wordlist, method string, workers int, extensions []string, headers map[string]string) {
 	start := time.Now()
 
-	// Open the wordlist
 	file, err := os.Open(wordlist)
 	if err != nil {
 		fmt.Println("Error opening wordlist:", err)
@@ -59,16 +58,23 @@ func fuzzUrl(url, wordlist string, workers int, extensions []string) {
 		go func() {
 			defer wg.Done()
 			for path := range jobs {
-				req, err := http.NewRequest("GET", url+path, nil)
+				req, err := http.NewRequest(method, url+path, nil)
 				if err != nil {
 					continue
 				}
+
+				// Apply custom headers
+				for k, v := range headers {
+					req.Header.Set(k, v)
+				}
+
 				resp, err := http.DefaultClient.Do(req)
 				if err != nil {
 					continue
 				}
 				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
+
 				if resp.StatusCode == 200 {
 					fmt.Printf("%s%s\t%d\t%d\n", url, path, resp.StatusCode, len(body))
 				}
@@ -87,16 +93,33 @@ func fuzzUrl(url, wordlist string, workers int, extensions []string) {
 
 	wg.Wait()
 
-	// Get the elapsed time
 	elapsed := time.Since(start)
 	fmt.Printf("Time taken: %v\n", elapsed)
+}
+
+func parseHeaders(headerArg string) map[string]string {
+	headers := make(map[string]string)
+	if headerArg == "" {
+		return headers
+	}
+	pairs := strings.Split(headerArg, ",")
+	for _, h := range pairs {
+		parts := strings.SplitN(h, ":", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			headers[key] = val
+		}
+	}
+	return headers
 }
 
 func main() {
 	printBanner()
 
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: " + os.Args[0] + " <url> <wordlist> [workers] [extensions]")
+		fmt.Println("Usage: " + os.Args[0] + " <url> <wordlist> [workers] [extensions] [method] [headers]")
+		fmt.Println("Example: " + os.Args[0] + " http://target/ words.txt 20 .php,.bak GET \"User-Agent: fuzzzilla,Authorization: Bearer abc123\"")
 		os.Exit(1)
 	}
 
@@ -115,5 +138,15 @@ func main() {
 		extensions = strings.Split(os.Args[4], ",")
 	}
 
-	fuzzUrl(url, wordlist, workers, extensions)
+	method := "GET"
+	if len(os.Args) >= 6 {
+		method = strings.ToUpper(os.Args[5])
+	}
+
+	headers := map[string]string{}
+	if len(os.Args) >= 7 {
+		headers = parseHeaders(os.Args[6])
+	}
+
+	fuzzUrl(url, wordlist, method, workers, extensions, headers)
 }
