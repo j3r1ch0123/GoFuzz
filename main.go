@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 )
 
 func printBanner() {
@@ -22,6 +23,10 @@ func printBanner() {
 }
 
 func fuzzUrl(url, wordlist string, workers int) {
+	// Get the current time
+	start := time.Now()
+
+	// Open the wordlist
 	file, err := os.Open(wordlist)
 	if err != nil {
 		fmt.Println("Error opening wordlist:", err)
@@ -76,6 +81,10 @@ func fuzzUrl(url, wordlist string, workers int) {
 	close(jobs)
 
 	wg.Wait()
+
+	// Get the elapsed time
+	elapsed := time.Since(start)
+	fmt.Printf("Time taken: %v\n", elapsed)
 }
 
 func main() {
