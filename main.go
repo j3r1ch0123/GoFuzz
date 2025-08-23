@@ -207,7 +207,7 @@ func main() {
 	flag.Parse()
 
 	if cfg.URLTemplate == "" || cfg.Wordlist == "" {
-		fmt.Println("Usage: fuzzer -u <url> -w <wordlist> [options]")
+		fmt.Println("Usage: gofuzzyourself -u <url> -w <wordlist> [options]")
 		os.Exit(1)
 	}
 
